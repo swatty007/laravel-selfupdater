@@ -7,7 +7,9 @@ use Codedge\Updater\Contracts\SourceRepositoryTypeContract;
 use Codedge\Updater\Contracts\UpdaterContract;
 use Codedge\Updater\SourceRepositoryTypes\GithubRepositoryType;
 use Codedge\Updater\SourceRepositoryTypes\HttpRepositoryType;
-use GuzzleHttp\Client;
+use Codedge\Updater\SourceRepositoryTypes\WebDavRepositoryType;
+use GuzzleHttp;
+use Sabre\DAV;
 use Illuminate\Foundation\Application;
 use InvalidArgumentException;
 
@@ -53,7 +55,7 @@ class UpdaterManager implements UpdaterContract
      *
      * @return SourceRepository
      */
-    public function source($name = '') : SourceRepository
+    public function source($name = ''): SourceRepository
     {
         $name = $name ?: $this->getDefaultSourceRepository();
 
@@ -83,7 +85,7 @@ class UpdaterManager implements UpdaterContract
     /**
      * Register a custom driver creator Closure.
      *
-     * @param string  $source
+     * @param string $source
      * @param Closure $callback
      *
      * @return $this
@@ -99,7 +101,7 @@ class UpdaterManager implements UpdaterContract
      * Dynamically call the default source repository instance.
      *
      * @param string $method
-     * @param array  $parameters
+     * @param array $parameters
      *
      * @return mixed
      */
@@ -156,7 +158,7 @@ class UpdaterManager implements UpdaterContract
         if (isset($this->customSourceCreators[$config['type']])) {
             return $this->callCustomSourceCreators($config);
         }
-        $repositoryMethod = 'create'.ucfirst($name).'Repository';
+        $repositoryMethod = 'create' . ucfirst($name) . 'Repository';
 
         if (method_exists($this, $repositoryMethod)) {
             return $this->{$repositoryMethod}($config);
@@ -187,9 +189,29 @@ class UpdaterManager implements UpdaterContract
      */
     protected function createHttpRepository(array $config)
     {
-        $client = new Client();
+        $client = new GuzzleHttp\Client();
 
         return $this->sourceRepository(new HttpRepositoryType($client, $config));
+    }
+
+    /**
+     * Create an instance for the WebDav source repository.
+     *
+     * @param array $config
+     *
+     * @return SourceRepository
+     */
+    protected function createWebDavRepository(array $config)
+    {
+        $settings = array(
+            'baseUri' => $config['repository_url'],
+            'userName' => $config['user'],
+            'password' => $config['password']
+        );
+
+        $client = new DAV\Client($settings);
+
+        return $this->sourceRepository(new WebDavRepositoryType($client, $config));
     }
 
     /**

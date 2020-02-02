@@ -137,10 +137,18 @@ You can specify these values by adding `SELF_UPDATER_MAILTO_NAME` and
 
 ### Private repositories
 
-Private repositories can be accessed via (Bearer) tokens. Each repository inside the config file should have
-a `private_access_token` field, where you can set the token.
+You can protect your **Git & HTTP** repositories via (Bearer) tokens. 
+Simply add a `private_access_token` field to your .env file, where you can set the token.
 
 **Note:** Do not prefix the token with `Bearer `. This is done automatically.
+
+To protect **WebDav** repositories you need to specify a login name & password instead (ideally an app password & not your private one!).
+
+```
+SELF_UPDATER_WEBDAV_USER=
+SELF_UPDATER_WEBDAV_PASSWORD=
+```
+
 
 ## Usage
 To start an update process, i. e. in a controller, just use:
@@ -196,6 +204,31 @@ To run with HTTP archives, use following settings in your `.env` file:
 | SELF_UPDATER_PKG_FILENAME_FORMAT | Zip package filename format |
 | SELF_UPDATER_DOWNLOAD_PATH | Download path on the webapp host server|
 
+### Using WebDav archives
+The package comes with an _WebDav_ source repository type to fetch 
+releases from an WebDav directory listing containing zip archives.
+
+To run with WebDav archives, use following settings in your `.env` file:
+
+| Config name              | Value / Description |
+| -----------              | ----------- |
+| SELF_UPDATER_SOURCE | `webDav` |
+| SELF_UPDATER_REPO_URL    | Archive URL, e.g. `http://archive.webapp/` |
+| SELF_UPDATER_PKG_FILENAME_FORMAT | Zip package filename format |
+| SELF_UPDATER_DOWNLOAD_PATH | Download path on the webapp host server|
+| SELF_UPDATER_WEBDAV_USER | User name used to access private repositories|
+| SELF_UPDATER_WEBDAV_PASSWORD | Password name used to access private repositories|
+
+Check the documentation of your WebDav server for the required syntax of the repo url. 
+For Nextcloud it would be something like this:
+```
+https://[YourDomain]/remote.php/dav/files/[YourUser]/[PathToArchives]
+```
+
+**Note:** Depending on the possibilities of your WebDav server its highly advisable to use an seperate app password & username.
+
+
+### Archive format
 The archive URL should contain nothing more than a simple directory listing with corresponding zip-Archives.
 
 `SELF_UPDATER_PKG_FILENAME_FORMAT` contains the filename format for all webapp update packages. I.e. when the update packages listed on the archive URL contain names like `webapp-v1.2.0.zip`, `webapp-v1.3.5.zip`, ... then the format should be `webapp-v_VERSION_`. The `_VERSION_` part is used as semantic versionioning variable for `MAJOR.MINOR.PATCH` versioning. The zip-extension is automatically added.
