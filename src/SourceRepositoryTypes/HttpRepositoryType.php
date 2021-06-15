@@ -4,76 +4,60 @@ declare(strict_types=1);
 
 namespace Codedge\Updater\SourceRepositoryTypes;
 
+use Codedge\Updater\AbstractRepositoryType;
 use Codedge\Updater\Contracts\SourceRepositoryTypeContract;
 use Codedge\Updater\Events\UpdateAvailable;
-use Codedge\Updater\Models\Release;
-use Codedge\Updater\Models\UpdateExecutor;
-use Codedge\Updater\Traits\SupportPrivateAccessToken;
-use Codedge\Updater\Traits\UseVersionFile;
-use Exception;
-use GuzzleHttp\ClientInterface;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
-use InvalidArgumentException;
+use Codedge\Updater\Events\UpdateFailed;
+use Codedge\Updater\Events\UpdateSucceeded;
+use File;
+use GuzzleHttp\Client;
+use Illuminate\Database\Eloquent\Collection;
 use Psr\Http\Message\ResponseInterface;
+use Storage;
+use Symfony\Component\Finder\Finder;
 
-class HttpRepositoryType implements SourceRepositoryTypeContract
+/**
+ * HttpRepositoryType.php.
+ *
+ * @author Steve Hegenbart <steve.hegenbart@kingstarter.de>
+ * @copyright See LICENSE file that was distributed with this source code.
+ */
+class HttpRepositoryType extends AbstractRepositoryType implements SourceRepositoryTypeContract
 {
-    use UseVersionFile, SupportPrivateAccessToken;
+    const NEW_VERSION_FILE = 'self-updater-new-version';
 
     /**
-     * @var ClientInterface
+     * @var Client
      */
     protected $client;
 
     /**
-     * @var array
-     */
-    protected $config;
-
-    /**
-     * @var Release
-     */
-    protected $release;
-
-    /**
-     * @var string prepend string
+     * @var Version prepend string
      */
     protected $prepend;
 
     /**
-     * @var string append string
+     * @var Version append string
      */
     protected $append;
 
     /**
-     * @var UpdateExecutor
-     */
-    protected $updateExecutor;
-
-    /**
      * Github constructor.
      *
-     * @param array $config
-     * @param ClientInterface $client
-     * @param UpdateExecutor $updateExecutor
+     * @param Client $client
+     * @param array  $config
      */
-    public function __construct(array $config, ClientInterface $client, UpdateExecutor $updateExecutor)
+    public function __construct(Client $client, array $config)
     {
         $this->client = $client;
         $this->config = $config;
-
+        $this->config['version_installed'] = config('self-update.version_installed');
+        $this->config['exclude_folders'] = config('self-update.exclude_folders');
         // Get prepend and append strings
         $this->prepend = preg_replace('/_VERSION_.*$/', '', $this->config['pkg_filename_format']);
         $this->append = preg_replace('/^.*_VERSION_/', '', $this->config['pkg_filename_format']);
 
-        $this->release = resolve(Release::class);
-        $this->release->setStoragePath(Str::finish($this->config['download_path'], DIRECTORY_SEPARATOR))
-                      ->setUpdatePath(base_path(), config('self-update.exclude_folders'))
-                      ->setAccessToken($config['private_access_token']);
-
-        $this->updateExecutor = $updateExecutor;
+        $this->setAccessToken($config['private_access_token']);
     }
 
     /**
@@ -81,22 +65,23 @@ class HttpRepositoryType implements SourceRepositoryTypeContract
      *
      * @param string $currentVersion
      *
-     * @throws InvalidArgumentException
-     * @throws Exception
+     * @throws \InvalidArgumentException
+     * @throws \Exception
      *
      * @return bool
      */
-    public function isNewVersionAvailable($currentVersion = ''): bool
+    public function isNewVersionAvailable($currentVersion = '') : bool
     {
         $version = $currentVersion ?: $this->getVersionInstalled();
 
         if (! $version) {
-            throw new InvalidArgumentException('No currently installed version specified.');
+            throw new \InvalidArgumentException('No currently installed version specified.');
         }
 
-        $versionAvailable = $this->getVersionAvailable();
+        // Remove the version file to forcefully update current version
+        $this->deleteVersionFile();
 
-        if (version_compare($version, $versionAvailable, '<')) {
+        if (version_compare($version, $this->getVersionAvailable(), '<')) {
             if (! $this->versionFileExists()) {
                 $this->setVersionFile($this->getVersionAvailable());
                 event(new UpdateAvailable($this->getVersionAvailable()));
@@ -113,72 +98,100 @@ class HttpRepositoryType implements SourceRepositoryTypeContract
      *
      * @param string $version
      *
-     * @throws Exception
-     *
-     * @return Release
-     */
-    public function fetch($version = ''): Release
-    {
-        $response = $this->getRepositoryReleases();
-        $releaseCollection = $this->extractFromHtml($response->getBody()->getContents());
-
-        if ($releaseCollection->isEmpty()) {
-            throw new Exception('Cannot find a release to update. Please check the repository you\'re pulling from');
-        }
-
-        $release = $this->selectRelease($releaseCollection, $version);
-
-        $this->release->setVersion($this->prepend.$release->name.$this->append)
-                      ->setRelease($this->prepend.$release->name.$this->append.'.zip')
-                      ->updateStoragePath()
-                      ->setDownloadUrl($release->zipball_url);
-
-        if (! $this->release->isSourceAlreadyFetched()) {
-            $this->release->download($this->client);
-            $this->release->extract();
-        }
-
-        return $this->release;
-    }
-
-    /**
-     * @param Collection $collection
-     * @param string $version
+     * @throws \Exception
      *
      * @return mixed
      */
-    public function selectRelease(Collection $collection, string $version)
+    public function fetch($version = '')
     {
-        $release = $collection->first();
+        if (($releaseCollection = $this->getPackageReleases())->isEmpty()) {
+            throw new \Exception('Cannot find a release to update. Please check the repository you\'re pulling from');
+        }
 
-        if (! empty($version)) {
-            if ($collection->contains('name', $version)) {
-                $release = $collection->where('name', $version)->first();
-            } else {
-                Log::info('No release for version "'.$version.'" found. Selecting latest.');
+        $release = $releaseCollection->first();
+        $storagePath = $this->config['download_path'];
+
+        if (! File::exists($storagePath)) {
+            File::makeDirectory($storagePath, 493, true, true);
+        }
+
+        if (! $version) {
+            $release = $releaseCollection->where('name', $version)->first();
+            if (! $release) {
+                throw new \Exception('Given version was not found in release list.');
             }
         }
 
-        return $release;
+        $versionName = $this->prepend.$release->name.$this->append;
+        $storageFilename = $versionName.'.zip';
+
+        if (! $this->isSourceAlreadyFetched($release->name)) {
+            $storageFile = $storagePath.'/'.$storageFilename;
+            $this->downloadRelease($this->client, $release->zipball_url, $storageFile);
+            $this->unzipArchive($storageFile, $storagePath.'/'.$versionName);
+        }
     }
 
     /**
-     * @param Release $release
+     * Perform the actual update process.
+     *
+     * @param string $version
      *
      * @return bool
-     * @throws Exception
      */
-    public function update(Release $release): bool
+    public function update($version = '') : bool
     {
-        return $this->updateExecutor->run($release);
+        $this->setPathToUpdate(base_path(), $this->config['exclude_folders']);
+
+        if ($this->hasCorrectPermissionForUpdate()) {
+            if (empty($version)) {
+                $version = $this->getVersionAvailable();
+            }
+            $sourcePath = $this->config['download_path'].DIRECTORY_SEPARATOR.$this->prepend.$version.$this->append;
+
+            // Move all directories first
+            collect((new Finder())->in($sourcePath)->exclude($this->config['exclude_folders'])->directories()->sort(function ($a, $b) {
+                return strlen($b->getRealpath()) - strlen($a->getRealpath());
+            }))->each(function ($directory) { /** @var \SplFileInfo $directory */
+                if (count(array_intersect(File::directories(
+                        $directory->getRealPath()), $this->config['exclude_folders'])) == 0) {
+                    File::copyDirectory(
+                        $directory->getRealPath(),
+                        base_path($directory->getRelativePath()).'/'.$directory->getBasename()
+                    );
+                }
+                File::deleteDirectory($directory->getRealPath());
+            });
+
+            // Now move all the files left in the main directory
+            collect(File::allFiles($sourcePath, true))->each(function ($file) { /* @var \SplFileInfo $file */
+                File::copy($file->getRealPath(), base_path($file->getFilename()));
+            });
+
+            File::deleteDirectory($sourcePath);
+            $this->deleteVersionFile();
+            event(new UpdateSucceeded($version));
+
+            return true;
+        }
+
+        event(new UpdateFailed($this));
+
+        return false;
     }
 
     /**
-     * {@inheritdoc}
+     * Get the version that is currenly installed.
+     * Example: 1.1.0 or v1.1.0 or "1.1.0 version".
+     *
+     * @param string $prepend
+     * @param string $append
+     *
+     * @return string
      */
-    public function getVersionInstalled(): string
+    public function getVersionInstalled($prepend = '', $append = '') : string
     {
-        return (string) config('self-update.version_installed');
+        return $this->config['version_installed'];
     }
 
     /**
@@ -186,17 +199,22 @@ class HttpRepositoryType implements SourceRepositoryTypeContract
      * Example: 2.6.5 or v2.6.5.
      *
      * @param string $prepend Prepend a string to the latest version
-     * @param string $append Append a string to the latest version
+     * @param string $append  Append a string to the latest version
+     *
+     * @throws \Exception
      *
      * @return string
-     * @throws Exception
      */
-    public function getVersionAvailable($prepend = '', $append = ''): string
+    public function getVersionAvailable($prepend = '', $append = '') : string
     {
+        $version = '';
         if ($this->versionFileExists()) {
             $version = $this->getVersionFile();
         } else {
-            $releaseCollection = $this->extractFromHtml($this->getRepositoryReleases()->getBody()->getContents());
+            $releaseCollection = $this->getPackageReleases();
+            if ($releaseCollection->isEmpty()) {
+                throw new \Exception('Retrieved version list is empty.');
+            }
             $version = $releaseCollection->first()->name;
         }
 
@@ -206,48 +224,80 @@ class HttpRepositoryType implements SourceRepositoryTypeContract
     /**
      * Retrieve html body with list of all releases from archive URL.
      *
-     * @return ResponseInterface
-     * @throws Exception
+     *@throws \Exception
+     *
+     * @return mixed|ResponseInterface
      */
-    protected function getRepositoryReleases(): ResponseInterface
+    protected function getPackageReleases()
     {
-        if (empty($this->config['repository_url'])) {
-            throw new Exception('No repository specified. Please enter a valid URL in your config.');
+        if (empty($url = $this->config['repository_url'])) {
+            throw new \Exception('No repository specified. Please enter a valid URL in your config.');
         }
 
-        $headers = [];
-
-        if ($this->release->hasAccessToken()) {
-            $headers = [
-                'Authorization' => $this->getAccessToken(),
-            ];
+        $format = str_replace('_VERSION_', '\d+\.\d+\.\d+',
+                    str_replace('.', '\.', $this->config['pkg_filename_format'])
+                  ).'.zip';
+        $count = preg_match_all(
+            "/<a.*href=\".*$format\">($format)<\/a>/i",
+            $this->client->get($url)->getBody()->getContents(),
+            $files);
+        $collection = [];
+        $url = preg_replace('/\/$/', '', $url);
+        for ($i = 0; $i < $count; $i++) {
+            $basename = preg_replace("/^$this->prepend/", '',
+                          preg_replace("/$this->append$/", '',
+                            preg_replace('/.zip$/', '', $files[1][$i])
+                        ));
+            array_push($collection, (object) [
+                'name' => $basename,
+                'zipball_url' => $url.'/'.$files[1][$i],
+            ]);
         }
+        // Sort collection alphabetically descending to have newest package as first
+        array_multisort($collection, SORT_DESC);
 
-        return $this->client->request('GET', $this->config['repository_url'], ['headers' => $headers]);
+        return new Collection($collection);
     }
 
-    private function extractFromHtml(string $content): Collection
+    /**
+     * Check if the file with the new version already exists.
+     *
+     * @return bool
+     */
+    protected function versionFileExists() : bool
     {
-        $format = str_replace(
-                        '_VERSION_', '(\d+\.\d+\.\d+)',
-                        str_replace('.', '\.', $this->config['pkg_filename_format'])
-        ).'.zip';
-        $linkPattern = '<a.*href="(.*'.$format.')"';
+        return Storage::exists(static::NEW_VERSION_FILE);
+    }
 
-        preg_match_all('/'.$linkPattern.'/i', $content, $files);
-        $releaseVersions = $files[2];
+    /**
+     * Write the version file.
+     *
+     * @param $content
+     *
+     * @return bool
+     */
+    protected function setVersionFile(string $content) : bool
+    {
+        return Storage::put(static::NEW_VERSION_FILE, $content);
+    }
 
-        // Extract domain only
-        preg_match('/(?:\w+:)?\/\/[^\/]+([^?#]+)/', $this->config['repository_url'], $matches);
-        $baseUrl = preg_replace('#'.$matches[1].'#', '', $this->config['repository_url']);
+    /**
+     * Get the content of the version file.
+     *
+     * @return string
+     */
+    protected function getVersionFile() : string
+    {
+        return Storage::get(static::NEW_VERSION_FILE);
+    }
 
-        $releases = collect($files[1])->map(function ($item, $key) use ($baseUrl, $releaseVersions) {
-            return (object) [
-                'name' => $releaseVersions[$key],
-                'zipball_url' => $baseUrl.$item,
-            ];
-        });
-
-        return new Collection($releases);
+    /**
+     * Delete the version file.
+     *
+     * @return bool
+     */
+    protected function deleteVersionFile() : bool
+    {
+        return Storage::delete(static::NEW_VERSION_FILE);
     }
 }

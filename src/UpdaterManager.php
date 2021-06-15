@@ -1,31 +1,25 @@
 <?php
 
-declare(strict_types=1);
-
 namespace Codedge\Updater;
 
+use Closure;
 use Codedge\Updater\Contracts\SourceRepositoryTypeContract;
 use Codedge\Updater\Contracts\UpdaterContract;
-use Codedge\Updater\Models\UpdateExecutor;
 use Codedge\Updater\SourceRepositoryTypes\GithubRepositoryType;
 use Codedge\Updater\SourceRepositoryTypes\HttpRepositoryType;
-<<<<<<< HEAD
 use Codedge\Updater\SourceRepositoryTypes\WebDavRepositoryType;
 use GuzzleHttp;
 use Sabre\DAV;
-=======
-use Exception;
->>>>>>> b66304e8a51b1a0cfb8776410ab8fd1d1eb9083b
 use Illuminate\Foundation\Application;
 use InvalidArgumentException;
 
 /**
- * UpdaterManager.
+ * Updater.php.
  *
  * @author Holger Lösken <holger.loesken@codedge.de>
  * @copyright See LICENSE file that was distributed with this source code.
  */
-final class UpdaterManager implements UpdaterContract
+class UpdaterManager implements UpdaterContract
 {
     /**
      * Application instance.
@@ -59,13 +53,9 @@ final class UpdaterManager implements UpdaterContract
      *
      * @param string $name
      *
-     * @return SourceRepositoryTypeContract
+     * @return SourceRepository
      */
-<<<<<<< HEAD
     public function source($name = ''): SourceRepository
-=======
-    public function source(string $name = ''): SourceRepositoryTypeContract
->>>>>>> b66304e8a51b1a0cfb8776410ab8fd1d1eb9083b
     {
         $name = $name ?: $this->getDefaultSourceRepository();
 
@@ -85,7 +75,6 @@ final class UpdaterManager implements UpdaterContract
     /**
      * @param SourceRepositoryTypeContract $sourceRepository
      *
-<<<<<<< HEAD
      * @return SourceRepository
      */
     public function sourceRepository(SourceRepositoryTypeContract $sourceRepository)
@@ -115,13 +104,10 @@ final class UpdaterManager implements UpdaterContract
      * @param array $parameters
      *
      * @return mixed
-=======
-     * @return SourceRepositoryTypeContract
->>>>>>> b66304e8a51b1a0cfb8776410ab8fd1d1eb9083b
      */
-    public function sourceRepository(SourceRepositoryTypeContract $sourceRepository): SourceRepositoryTypeContract
+    public function __call($method, $parameters)
     {
-        return new SourceRepository($sourceRepository, $this->app->make(UpdateExecutor::class));
+        return call_user_func_array([$this->source(), $method], $parameters);
     }
 
     /**
@@ -147,7 +133,7 @@ final class UpdaterManager implements UpdaterContract
      *
      * @return SourceRepositoryTypeContract
      */
-    protected function get(string $name)
+    protected function get($name)
     {
         return isset($this->sources[$name]) ? $this->sources[$name] : $this->resolve($name);
     }
@@ -159,9 +145,9 @@ final class UpdaterManager implements UpdaterContract
      *
      * @throws InvalidArgumentException
      *
-     * @return SourceRepositoryTypeContract
+     * @return mixed
      */
-    protected function resolve(string $name): SourceRepositoryTypeContract
+    protected function resolve($name)
     {
         $config = $this->getConfig($name);
 
@@ -169,34 +155,34 @@ final class UpdaterManager implements UpdaterContract
             throw new InvalidArgumentException("Source repository [{$name}] is not defined.");
         }
 
-<<<<<<< HEAD
         if (isset($this->customSourceCreators[$config['type']])) {
             return $this->callCustomSourceCreators($config);
         }
         $repositoryMethod = 'create' . ucfirst($name) . 'Repository';
-=======
-        $repositoryMethod = 'create'.ucfirst($name).'Repository';
->>>>>>> b66304e8a51b1a0cfb8776410ab8fd1d1eb9083b
 
-        return $this->{$repositoryMethod}();
+        if (method_exists($this, $repositoryMethod)) {
+            return $this->{$repositoryMethod}($config);
+        }
+        throw new InvalidArgumentException("Repository [{$name}] is not supported.");
     }
 
     /**
-     * @return SourceRepositoryTypeContract
-     * @throws Exception
+     * Create an instance for the Github source repository.
+     *
+     * @param array $config
+     *
+     * @return SourceRepository
      */
-    protected function createGithubRepository(): SourceRepositoryTypeContract
+    protected function createGithubRepository(array $config)
     {
-        /** @var GithubRepositoryType $factory */
-        $factory = $this->app->make(GithubRepositoryType::class);
+        $client = new Client();
 
-        return $this->sourceRepository($factory->create());
+        return $this->sourceRepository(new GithubRepositoryType($client, $config));
     }
 
     /**
      * Create an instance for the Http source repository.
      *
-<<<<<<< HEAD
      * @param array $config
      *
      * @return SourceRepository
@@ -234,12 +220,9 @@ final class UpdaterManager implements UpdaterContract
      * @param array $config
      *
      * @return mixed
-=======
-     * @return SourceRepositoryTypeContract
->>>>>>> b66304e8a51b1a0cfb8776410ab8fd1d1eb9083b
      */
-    protected function createHttpRepository(): SourceRepositoryTypeContract
+    protected function callCustomSourceCreators(array $config)
     {
-        return $this->sourceRepository($this->app->make(HttpRepositoryType::class));
+        return $this->customSourceCreators[$config['type']]($this->app, $config);
     }
 }

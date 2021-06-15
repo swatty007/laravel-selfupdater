@@ -40,10 +40,13 @@ class CheckForUpdate extends Command
      */
     public function handle()
     {
-        $currentVersion = $this->updater->source()->getVersionInstalled();
+        $prefix = $this->option('prefixVersionWith');
+        $suffix = $this->option('suffixVersionWith');
+
+        $currentVersion = $this->updater->source()->getVersionInstalled($prefix, $suffix);
         $isAvail = $this->updater->source()->isNewVersionAvailable($currentVersion);
 
-        if ($isAvail === true) {
+        if ($isAvail) {
             $newVersion = $this->updater->source()->getVersionAvailable();
             $this->info('A new version ['.$newVersion.'] is available.');
         } else {
