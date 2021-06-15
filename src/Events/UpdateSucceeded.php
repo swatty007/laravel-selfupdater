@@ -2,54 +2,27 @@
 
 namespace Codedge\Updater\Events;
 
-/**
- * UpdateFailed.php.
- *
- * @author Holger Lösken <holger.loesken@codedge.de>
- * @copyright See LICENSE file that was distributed with this source code.
- */
+use Codedge\Updater\Models\Release;
+
 class UpdateSucceeded
 {
     /**
-     * @var string
+     * @var Release
      */
-    protected $eventName = 'Update succeeded';
+    protected $release;
 
-    /**
-     * @var string The version of the new software package.
-     */
-    protected $versionUpdatedTo;
-
-    /**
-     * UpdateFailed constructor.
-     *
-     * @param $versionUpdatedTo
-     */
-    public function __construct($versionUpdatedTo)
+    public function __construct(Release $release)
     {
-        $this->versionUpdatedTo = $versionUpdatedTo;
-    }
-
-    /**
-     * Get the event name.
-     *
-     * @return string
-     */
-    public function getEventName()
-    {
-        return $this->eventName;
+        $this->release = $release;
     }
 
     /**
      * Get the new version.
      *
-     * @param string $prepend
-     * @param string $append
-     *
      * @return string
      */
-    public function getVersionUpdatedTo($prepend = '', $append = '')
+    public function getVersionUpdatedTo(): ?string
     {
-        return $prepend.$this->versionUpdatedTo.$append;
+        return $this->release->getVersion();
     }
 }
