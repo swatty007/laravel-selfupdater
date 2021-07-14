@@ -3,6 +3,10 @@
 namespace Codedge\Updater;
 
 use Codedge\Updater\Contracts\SourceRepositoryTypeContract;
+use Codedge\Updater\Models\Release;
+use Codedge\Updater\Models\UpdateExecutor;
+use Codedge\Updater\Traits\SupportPrivateAccessToken;
+use Codedge\Updater\Traits\UseVersionFile;
 use Illuminate\Support\Facades\Artisan;
 
 /**
@@ -11,21 +15,29 @@ use Illuminate\Support\Facades\Artisan;
  * @author Holger Lösken <holger.loesken@codedge.de>
  * @copyright See LICENSE file that was distributed with this source code.
  */
-class SourceRepository implements SourceRepositoryTypeContract
+final class SourceRepository implements SourceRepositoryTypeContract
 {
+    use UseVersionFile, SupportPrivateAccessToken;
+
     /**
      * @var SourceRepositoryTypeContract
      */
     protected $sourceRepository;
 
     /**
+     * @var UpdateExecutor
+     */
+    protected $updateExecutor;
+
+    /**
      * SourceRepository constructor.
      *
      * @param SourceRepositoryTypeContract $sourceRepository
      */
-    public function __construct(SourceRepositoryTypeContract $sourceRepository)
+    public function __construct(SourceRepositoryTypeContract $sourceRepository, UpdateExecutor $updateExecutor)
     {
         $this->sourceRepository = $sourceRepository;
+        $this->updateExecutor = $updateExecutor;
     }
 
     /**
@@ -33,9 +45,9 @@ class SourceRepository implements SourceRepositoryTypeContract
      *
      * @param string $version
      *
-     * @return mixed
+     * @return Release
      */
-    public function fetch($version = '')
+    public function fetch($version = ''): Release
     {
         $version = $version ?: $this->getVersionAvailable();
 
@@ -43,26 +55,14 @@ class SourceRepository implements SourceRepositoryTypeContract
     }
 
     /**
-     * Perform the actual update process.
-     *
-     * @param string $version       Define the version you want to update to
-     * @param bool   $forceFetching Forces a fresh download of the latest update version
+     * @param Release $release
      *
      * @return bool
+     * @throws \Exception
      */
-    public function update($version = '', $forceFetching = true) : bool
+    public function update(Release $release): bool
     {
-        $version = $version ?: $this->getVersionAvailable();
-
-        if ($forceFetching) {
-            $this->fetch($version);
-        }
-
-        $this->preUpdateArtisanCommands();
-        $updateStatus = $this->sourceRepository->update($version);
-        $this->postUpdateArtisanCommands();
-
-        return $updateStatus;
+        return $this->updateExecutor->run($release);
     }
 
     /**
@@ -72,7 +72,7 @@ class SourceRepository implements SourceRepositoryTypeContract
      *
      * @return bool
      */
-    public function isNewVersionAvailable($currentVersion = '') : bool
+    public function isNewVersionAvailable($currentVersion = ''): bool
     {
         return $this->sourceRepository->isNewVersionAvailable($currentVersion);
     }
@@ -86,7 +86,7 @@ class SourceRepository implements SourceRepositoryTypeContract
      *
      * @return string
      */
-    public function getVersionInstalled($prepend = '', $append = '') : string
+    public function getVersionInstalled($prepend = '', $append = ''): string
     {
         return $this->sourceRepository->getVersionInstalled($prepend, $append);
     }
@@ -100,7 +100,7 @@ class SourceRepository implements SourceRepositoryTypeContract
      *
      * @return string
      */
-    public function getVersionAvailable($prepend = '', $append = '') : string
+    public function getVersionAvailable($prepend = '', $append = ''): string
     {
         return $this->sourceRepository->getVersionAvailable($prepend, $append);
     }
@@ -108,20 +108,28 @@ class SourceRepository implements SourceRepositoryTypeContract
     /**
      * Run pre update artisan commands from config.
      */
-    protected function preUpdateArtisanCommands()
+    public function preUpdateArtisanCommands(): int
     {
-        collect(config('self-update.artisan_commands.pre_update'))->each(function ($commandParams, $commandKey) {
+        $commands = collect(config('self-update.artisan_commands.pre_update'));
+
+        $commands->each(function ($commandParams, $commandKey) {
             Artisan::call($commandKey, $commandParams['params']);
         });
+
+        return $commands->count();
     }
 
     /**
      * Run post update artisan commands from config.
      */
-    protected function postUpdateArtisanCommands()
+    public function postUpdateArtisanCommands(): int
     {
-        collect(config('self-update.artisan_commands.post_update'))->each(function ($commandParams, $commandKey) {
+        $commands = collect(config('self-update.artisan_commands.post_update'));
+
+        $commands->each(function ($commandParams, $commandKey) {
             Artisan::call($commandKey, $commandParams['params']);
         });
+
+        return $commands->count();
     }
 }

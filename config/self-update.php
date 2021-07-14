@@ -44,6 +44,7 @@ return [
             'repository_url' => '',
             'download_path' => env('SELF_UPDATER_DOWNLOAD_PATH', '/tmp'),
             'private_access_token' => env('SELF_UPDATER_GITHUB_PRIVATE_ACCESS_TOKEN', ''),
+            'use_branch' => env('SELF_UPDATER_USE_BRANCH', ''),
         ],
         'http' => [
             'type' => 'http',
@@ -67,7 +68,7 @@ return [
     | Exclude folders from update
     |--------------------------------------------------------------------------
     |
-    | Specifiy folders which should not be updated and will be skipped during the
+    | Specific folders which should not be updated and will be skipped during the
     | update process.
     |
     | Here's already a list of good examples to skip. You may want to keep those.
@@ -75,6 +76,7 @@ return [
     */
 
     'exclude_folders' => [
+        '__MACOSX',
         'node_modules',
         'bootstrap/cache',
         'bower',
@@ -98,18 +100,37 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Mail To Settings
+    | Notifications
     |--------------------------------------------------------------------------
     |
-    | Configure if fired events should be logged
+    | Specify for which events you want to get notifications. Out of the box you can use 'mail'.
     |
     */
 
-    'mail_to' => [
-        'address' => env('SELF_UPDATER_MAILTO_ADDRESS', ''),
-        'name' => env('SELF_UPDATER_MAILTO_NAME', ''),
-        'subject_update_available' => env('SELF_UPDATER_MAILTO_UPDATE_AVAILABLE_SUBJECT', 'Update available'),
-        'subject_update_succeeded' => env('SELF_UPDATER_MAILTO_UPDATE_SUCCEEDED_SUBJECT', 'Update succeeded'),
+    'notifications' => [
+        'notifications' => [
+            \Codedge\Updater\Notifications\Notifications\UpdateSucceeded::class => ['mail'],
+            \Codedge\Updater\Notifications\Notifications\UpdateFailed::class => ['mail'],
+            \Codedge\Updater\Notifications\Notifications\UpdateAvailable::class => ['mail'],
+        ],
+
+        /*
+         * Here you can specify the notifiable to which the notifications should be sent. The default
+         * notifiable will use the variables specified in this config file.
+         */
+        'notifiable' => \Codedge\Updater\Notifications\Notifiable::class,
+
+        'mail' => [
+            'to' => [
+                'address' => env('SELF_UPDATER_MAILTO_ADDRESS', 'notifications@example.com'),
+                'name' => env('SELF_UPDATER_MAILTO_NAME', ''),
+            ],
+
+            'from' => [
+                'address' => env('SELF_UPDATER_MAIL_FROM_ADDRESS', 'updater@example.com'),
+                'name' => env('SELF_UPDATER_MAIL_FROM_NAME', 'Update'),
+            ],
+        ],
     ],
 
     /*

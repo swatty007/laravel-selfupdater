@@ -1,25 +1,20 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
 
 namespace Codedge\Updater\Tests;
 
 use Codedge\Updater\UpdaterFacade;
-use ReflectionClass;
+use Codedge\Updater\UpdaterManager;
 
-class UpdaterFacadeTest extends TestCase
+final class UpdaterFacadeTest extends TestCase
 {
-    public function testGetFacadeAccessor()
+    /** @test */
+    public function it_can_use_the_facade(): void
     {
-        $accessor = 'updater';
-        $class = UpdaterFacade::class;
-
-        $reflection = new ReflectionClass($class);
-
-        $method = $reflection->getMethod('getFacadeAccessor');
-        $method->setAccessible(true);
-
-        $msg = "Expected class '$class' to have an accessor of '$accessor'.";
-
-        $this->assertSame($accessor, $method->invoke(null), $msg);
+        $this->assertInstanceOf(
+            UpdaterManager::class,
+            UpdaterFacade::getFacadeRoot()
+        );
     }
-
 }
