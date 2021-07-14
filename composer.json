@@ -25,14 +25,15 @@
         "ext-json": "*",
         "ext-zip": "*",
         "guzzlehttp/guzzle": "6.* || 7.*",
-        "laravel/framework": "^8.46.0"
+        "laravel/framework": "^8.49.2",
+		"sabre/dav": "^4.0"
     },
     "require-dev": {
         "dg/bypass-finals": "^1.3",
         "mikey179/vfsstream": "^1.6",
         "mockery/mockery": "^1.4",
-        "orchestra/testbench": "^6.18.0",
-        "phpunit/phpunit": "^9.5.5"
+        "orchestra/testbench": "^6.19.0",
+        "phpunit/phpunit": "^9.5.6"
     },
     "config": {
         "sort-packages": true
@@ -69,43 +70,4 @@
         "issues": "https://github.com/codedge/laravel-selfupdater/issues",
         "source": "https://github.com/codedge/laravel-selfupdater"
     }
-<<<<<<< HEAD
-  ],
-  "autoload": {
-    "psr-4": {
-      "Codedge\\Updater\\": "src/"
-    }
-  },
-  "autoload-dev": {
-    "psr-4": {
-      "Codedge\\Updater\\Tests\\": "tests/"
-    }
-  },
-  "config": {
-    "sort-packages": true
-  },
-  "extra": {
-    "laravel": {
-      "providers": [
-        "Codedge\\Updater\\UpdaterServiceProvider"
-      ],
-      "aliases": {
-        "Updater": "Codedge\\Updater\\UpdaterFacade"
-      }
-    }
-  },
-  "require": {
-    "php": ">=7.2",
-    "ext-zip": "*",
-    "guzzlehttp/guzzle": "6.*",
-    "laravel/framework": "^5.8|6.*|7.*",
-    "sabre/dav": "^4.0"
-  },
-  "require-dev": {
-    "phpunit/phpunit": "^8.0",
-    "mockery/mockery": "^1.0",
-    "orchestra/testbench": "^4.0"
-  }
-=======
->>>>>>> b66304e8a51b1a0cfb8776410ab8fd1d1eb9083b
 }

@@ -9,15 +9,12 @@ use Codedge\Updater\Contracts\UpdaterContract;
 use Codedge\Updater\Models\UpdateExecutor;
 use Codedge\Updater\SourceRepositoryTypes\GithubRepositoryType;
 use Codedge\Updater\SourceRepositoryTypes\HttpRepositoryType;
-<<<<<<< HEAD
+use Exception;
+use Illuminate\Foundation\Application;
+use InvalidArgumentException;
 use Codedge\Updater\SourceRepositoryTypes\WebDavRepositoryType;
 use GuzzleHttp;
 use Sabre\DAV;
-=======
-use Exception;
->>>>>>> b66304e8a51b1a0cfb8776410ab8fd1d1eb9083b
-use Illuminate\Foundation\Application;
-use InvalidArgumentException;
 
 /**
  * UpdaterManager.
@@ -61,11 +58,7 @@ final class UpdaterManager implements UpdaterContract
      *
      * @return SourceRepositoryTypeContract
      */
-<<<<<<< HEAD
-    public function source($name = ''): SourceRepository
-=======
     public function source(string $name = ''): SourceRepositoryTypeContract
->>>>>>> b66304e8a51b1a0cfb8776410ab8fd1d1eb9083b
     {
         $name = $name ?: $this->getDefaultSourceRepository();
 
@@ -85,39 +78,7 @@ final class UpdaterManager implements UpdaterContract
     /**
      * @param SourceRepositoryTypeContract $sourceRepository
      *
-<<<<<<< HEAD
-     * @return SourceRepository
-     */
-    public function sourceRepository(SourceRepositoryTypeContract $sourceRepository)
-    {
-        return new SourceRepository($sourceRepository);
-    }
-
-    /**
-     * Register a custom driver creator Closure.
-     *
-     * @param string $source
-     * @param Closure $callback
-     *
-     * @return $this
-     */
-    public function extend($source, Closure $callback)
-    {
-        $this->customSourceCreators[$source] = $callback;
-
-        return $this;
-    }
-
-    /**
-     * Dynamically call the default source repository instance.
-     *
-     * @param string $method
-     * @param array $parameters
-     *
-     * @return mixed
-=======
      * @return SourceRepositoryTypeContract
->>>>>>> b66304e8a51b1a0cfb8776410ab8fd1d1eb9083b
      */
     public function sourceRepository(SourceRepositoryTypeContract $sourceRepository): SourceRepositoryTypeContract
     {
@@ -169,14 +130,7 @@ final class UpdaterManager implements UpdaterContract
             throw new InvalidArgumentException("Source repository [{$name}] is not defined.");
         }
 
-<<<<<<< HEAD
-        if (isset($this->customSourceCreators[$config['type']])) {
-            return $this->callCustomSourceCreators($config);
-        }
-        $repositoryMethod = 'create' . ucfirst($name) . 'Repository';
-=======
         $repositoryMethod = 'create'.ucfirst($name).'Repository';
->>>>>>> b66304e8a51b1a0cfb8776410ab8fd1d1eb9083b
 
         return $this->{$repositoryMethod}();
     }
@@ -196,19 +150,14 @@ final class UpdaterManager implements UpdaterContract
     /**
      * Create an instance for the Http source repository.
      *
-<<<<<<< HEAD
-     * @param array $config
-     *
-     * @return SourceRepository
+     * @return SourceRepositoryTypeContract
      */
-    protected function createHttpRepository(array $config)
+    protected function createHttpRepository(): SourceRepositoryTypeContract
     {
-        $client = new GuzzleHttp\Client();
-
-        return $this->sourceRepository(new HttpRepositoryType($client, $config));
+        return $this->sourceRepository($this->app->make(HttpRepositoryType::class));
     }
-
-    /**
+	
+	    /**
      * Create an instance for the WebDav source repository.
      *
      * @param array $config
@@ -226,20 +175,5 @@ final class UpdaterManager implements UpdaterContract
         $client = new DAV\Client($settings);
 
         return $this->sourceRepository(new WebDavRepositoryType($client, $config));
-    }
-
-    /**
-     * Call a custom source repository type.
-     *
-     * @param array $config
-     *
-     * @return mixed
-=======
-     * @return SourceRepositoryTypeContract
->>>>>>> b66304e8a51b1a0cfb8776410ab8fd1d1eb9083b
-     */
-    protected function createHttpRepository(): SourceRepositoryTypeContract
-    {
-        return $this->sourceRepository($this->app->make(HttpRepositoryType::class));
     }
 }
